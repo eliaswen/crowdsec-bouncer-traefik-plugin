@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,11 +20,11 @@ import (
 	"text/template"
 	"time"
 
-	cache "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/cache"
-	captcha "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/captcha"
-	configuration "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/configuration"
-	ip "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/ip"
-	logger "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/logger"
+	cache "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/cache"
+	captcha "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/captcha"
+	configuration "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/configuration"
+	ip "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/ip"
+	logger "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/logger"
 )
 
 const (
@@ -123,6 +124,7 @@ type Bouncer struct {
 	cacheClient               *cache.Client
 	captchaClient             *captcha.Client
 	log                       *slog.Logger
+	remediationReasons        map[string]string
 }
 
 // AppSecResponse is the structured remediation Appsec returns for a request.
@@ -210,6 +212,10 @@ func New(_ context.Context, next http.Handler, config *configuration.Config, nam
 	if config.BanFilePath != "" {
 		banTemplate, banTemplateContentType, _ = configuration.GetTemplate(config.BanFilePath)
 	}
+	remediationReasons, err := configuration.GetRemediationReasons(config.RemediationReasonsFilePath)
+	if err != nil {
+		return nil, err
+	}
 
 	bouncer := &Bouncer{
 		next:     next,
@@ -247,6 +253,7 @@ func New(_ context.Context, next http.Handler, config *configuration.Config, nam
 		crowdsecStreamRoute:       crowdsecStreamRoute,
 		crowdsecHeader:            crowdsecHeader,
 		log:                       log,
+		remediationReasons:        remediationReasons,
 		serverPoolStrategy: &ip.PoolStrategy{
 			Checker: serverChecker,
 		},
@@ -378,7 +385,7 @@ func (bouncer *Bouncer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	// TODO This should be simplified
 	if bouncer.crowdsecMode != configuration.NoneMode {
-		value, cacheErr := bouncer.cacheClient.Get(remoteIP)
+		record, cacheErr := bouncer.cacheClient.GetDecision(remoteIP)
 		if cacheErr != nil {
 			cacheErrString := cacheErr.Error()
 			bouncer.log.Debug(fmt.Sprintf("ServeHTTP:Get ip:%s isBanned:false %s", remoteIP, cacheErrString))
@@ -393,11 +400,11 @@ func (bouncer *Bouncer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				return
 			}
 		} else {
-			bouncer.log.Debug(fmt.Sprintf("ServeHTTP ip:%s cache:hit isBanned:%v", remoteIP, value))
-			if value == cache.NoBannedValue {
+			bouncer.log.Debug(fmt.Sprintf("ServeHTTP ip:%s cache:hit isBanned:%v", remoteIP, record.Verdict))
+			if record.Verdict == cache.NoBannedValue {
 				bouncer.handleNextServeHTTP(rw, req, remoteIP)
 			} else {
-				bouncer.handleRemediationServeHTTP(rw, req, remoteIP, value)
+				bouncer.handleDecisionRemediationServeHTTP(rw, req, remoteIP, record)
 			}
 			return
 		}
@@ -412,15 +419,15 @@ func (bouncer *Bouncer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			bouncer.handleBanServeHTTP(rw, req, remoteIP, configuration.ReasonTECH)
 		}
 	} else {
-		value, err := handleNoStreamCache(bouncer, remoteIP)
+		record, err := handleNoStreamDecision(bouncer, remoteIP)
 		if err != nil {
 			bouncer.log.Debug("handleNoStreamCache:crowdsecQuery " + err.Error())
 		}
-		if value == cache.NoBannedValue {
+		if record.Verdict == cache.NoBannedValue {
 			bouncer.handleNextServeHTTP(rw, req, remoteIP)
 		} else {
-			bouncer.log.Debug(fmt.Sprintf("ServeHTTP:handleNoStreamCache ip:%s isBanned:%v %s", remoteIP, value, err.Error()))
-			bouncer.handleRemediationServeHTTP(rw, req, remoteIP, value)
+			bouncer.log.Debug(fmt.Sprintf("ServeHTTP:handleNoStreamCache ip:%s isBanned:%v %s", remoteIP, record.Verdict, err.Error()))
+			bouncer.handleDecisionRemediationServeHTTP(rw, req, remoteIP, record)
 		}
 	}
 }
@@ -455,6 +462,10 @@ type Login struct {
 
 // To append Headers we need to call rw.WriteHeader after set any header.
 func (bouncer *Bouncer) handleBanServeHTTP(rw http.ResponseWriter, req *http.Request, remoteIP, reason string) {
+	bouncer.handleDecisionBanServeHTTP(rw, req, remoteIP, reason, cache.DecisionRecord{})
+}
+
+func (bouncer *Bouncer) handleDecisionBanServeHTTP(rw http.ResponseWriter, req *http.Request, remoteIP, reason string, record cache.DecisionRecord) {
 	atomic.AddInt64(&blockedRequests, 1)
 
 	if bouncer.remediationCustomHeader != "" {
@@ -468,6 +479,9 @@ func (bouncer *Bouncer) handleBanServeHTTP(rw http.ResponseWriter, req *http.Req
 	templateData := map[string]string{
 		"RemediationReason": reason,
 		"ClientIP":          remoteIP,
+	}
+	for key, value := range bouncer.decisionTemplateData(record, reason) {
+		templateData[key] = value
 	}
 
 	if bouncer.traceCustomHeader != "" {
@@ -486,17 +500,78 @@ func (bouncer *Bouncer) handleBanServeHTTP(rw http.ResponseWriter, req *http.Req
 }
 
 func (bouncer *Bouncer) handleRemediationServeHTTP(rw http.ResponseWriter, req *http.Request, remoteIP, remediation string) {
-	bouncer.log.Debug(fmt.Sprintf("handleRemediationServeHTTP ip:%s remediation:%s", remoteIP, remediation))
-	if bouncer.captchaClient.Valid && remediation == cache.CaptchaValue && req.Method != http.MethodHead {
+	bouncer.handleDecisionRemediationServeHTTP(rw, req, remoteIP, cache.DecisionRecord{Verdict: remediation})
+}
+
+func (bouncer *Bouncer) handleDecisionRemediationServeHTTP(rw http.ResponseWriter, req *http.Request, remoteIP string, record cache.DecisionRecord) {
+	bouncer.log.Debug(fmt.Sprintf("handleRemediationServeHTTP ip:%s remediation:%s", remoteIP, record.Verdict))
+	if bouncer.captchaClient.Valid && record.Verdict == cache.CaptchaValue && req.Method != http.MethodHead {
 		if bouncer.captchaClient.Check(remoteIP) {
 			bouncer.handleNextServeHTTP(rw, req, remoteIP)
 			return
 		}
 		atomic.AddInt64(&blockedRequests, 1) //  If we serve a captcha that should count as a dropped request.
-		bouncer.captchaClient.ServeHTTP(rw, req, remoteIP)
+		data := bouncer.decisionTemplateData(record, configuration.ReasonLAPI)
+		data["RemediationReason"] = configuration.ReasonLAPI
+		data["ClientIP"] = remoteIP
+		if bouncer.traceCustomHeader != "" {
+			data["TraceID"] = req.Header.Get(bouncer.traceCustomHeader)
+		}
+		bouncer.captchaClient.ServeHTTPWithData(rw, req, remoteIP, data)
 		return
 	}
-	bouncer.handleBanServeHTTP(rw, req, remoteIP, configuration.ReasonLAPI)
+	bouncer.handleDecisionBanServeHTTP(rw, req, remoteIP, configuration.ReasonLAPI, record)
+}
+
+func (bouncer *Bouncer) decisionTemplateData(record cache.DecisionRecord, fallback string) map[string]string {
+	reason := fallback
+	if record.Scenario != "" {
+		reason = record.Scenario
+		if custom, ok := bouncer.remediationReasons[record.Scenario]; ok {
+			reason = custom
+		}
+	}
+	data := map[string]string{
+		"DecisionScenario":         record.Scenario,
+		"DecisionReason":           reason,
+		"DecisionExpiresAt":        record.ExpiresAt,
+		"DecisionRemainingSeconds": "",
+		"DecisionRemainingTime":    "",
+		"DecisionReasonHTML":       html.EscapeString(reason),
+	}
+	if record.ExpiresAt != "" {
+		if expiry, err := time.Parse(time.RFC3339, record.ExpiresAt); err == nil {
+			remaining := int64(time.Until(expiry).Seconds())
+			if time.Now().Before(expiry) {
+				remaining++
+			}
+			if remaining < 0 {
+				remaining = 0
+			}
+			data["DecisionRemainingSeconds"] = strconv.FormatInt(remaining, 10)
+			data["DecisionRemainingTime"] = readableDuration(remaining)
+		}
+	}
+	return data
+}
+
+func readableDuration(seconds int64) string {
+	parts := make([]string, 0, 3)
+	for _, unit := range []struct {
+		name    string
+		seconds int64
+	}{{"hour", 3600}, {"minute", 60}, {"second", 1}} {
+		value := seconds / unit.seconds
+		seconds %= unit.seconds
+		if value > 0 || (unit.seconds == 1 && len(parts) == 0) {
+			name := unit.name
+			if value != 1 {
+				name += "s"
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", value, name))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func (bouncer *Bouncer) handleNextServeHTTP(rw http.ResponseWriter, req *http.Request, remoteIP string) {
@@ -582,6 +657,11 @@ func startTicker(name string, updateInterval int64, log *slog.Logger, work func(
 
 // We are now in none or live mode.
 func handleNoStreamCache(bouncer *Bouncer, remoteIP string) (string, error) {
+	record, err := handleNoStreamDecision(bouncer, remoteIP)
+	return record.Verdict, err
+}
+
+func handleNoStreamDecision(bouncer *Bouncer, remoteIP string) (cache.DecisionRecord, error) {
 	isLiveMode := bouncer.crowdsecMode == configuration.LiveMode
 	routeURL := url.URL{
 		Scheme:   bouncer.crowdsecScheme,
@@ -592,28 +672,28 @@ func handleNoStreamCache(bouncer *Bouncer, remoteIP string) (string, error) {
 	body, err := crowdsecQuery(bouncer, routeURL.String(), nil)
 	if err != nil {
 		if bouncer.updateMaxFailure == -1 {
-			return cache.NoBannedValue, err
+			return cache.DecisionRecord{Verdict: cache.NoBannedValue}, err
 		}
-		return cache.BannedValue, err
+		return cache.DecisionRecord{Verdict: cache.BannedValue}, err
 	}
 
 	if bytes.Equal(body, []byte("null")) {
 		if isLiveMode {
-			bouncer.cacheClient.Set(remoteIP, cache.NoBannedValue, bouncer.defaultDecisionTimeout)
+			_ = bouncer.cacheClient.SetDecision(remoteIP, cache.DecisionRecord{Verdict: cache.NoBannedValue}, bouncer.defaultDecisionTimeout)
 		}
-		return cache.NoBannedValue, nil
+		return cache.DecisionRecord{Verdict: cache.NoBannedValue}, nil
 	}
 
 	var decisions []Decision
 	err = json.Unmarshal(body, &decisions)
 	if err != nil {
-		return cache.BannedValue, fmt.Errorf("handleNoStreamCache:parseBody %w", err)
+		return cache.DecisionRecord{Verdict: cache.BannedValue}, fmt.Errorf("handleNoStreamCache:parseBody %w", err)
 	}
 	if len(decisions) == 0 {
 		if isLiveMode {
-			bouncer.cacheClient.Set(remoteIP, cache.NoBannedValue, bouncer.defaultDecisionTimeout)
+			_ = bouncer.cacheClient.SetDecision(remoteIP, cache.DecisionRecord{Verdict: cache.NoBannedValue}, bouncer.defaultDecisionTimeout)
 		}
-		return cache.NoBannedValue, nil
+		return cache.DecisionRecord{Verdict: cache.NoBannedValue}, nil
 	}
 	var decision Decision
 	for _, d := range decisions {
@@ -624,7 +704,7 @@ func handleNoStreamCache(bouncer *Bouncer, remoteIP string) (string, error) {
 	}
 	duration, err := time.ParseDuration(decision.Duration)
 	if err != nil {
-		return cache.BannedValue, fmt.Errorf("handleNoStreamCache:parseDuration %w", err)
+		return cache.DecisionRecord{Verdict: cache.BannedValue}, fmt.Errorf("handleNoStreamCache:parseDuration %w", err)
 	}
 	var value string
 	switch decision.Type {
@@ -635,14 +715,15 @@ func handleNoStreamCache(bouncer *Bouncer, remoteIP string) (string, error) {
 	default:
 		bouncer.log.Info("handleStreamCache:unknownType " + decision.Type)
 	}
+	record := cache.DecisionRecord{Verdict: value, Scenario: decision.Scenario, ExpiresAt: time.Now().Add(duration).UTC().Format(time.RFC3339)}
 	if isLiveMode && bouncer.defaultDecisionTimeout > 0 {
 		durationSecond := int64(duration.Seconds())
 		if bouncer.defaultDecisionTimeout < durationSecond {
 			durationSecond = bouncer.defaultDecisionTimeout
 		}
-		bouncer.cacheClient.Set(remoteIP, value, durationSecond)
+		_ = bouncer.cacheClient.SetDecision(remoteIP, record, durationSecond)
 	}
-	return value, errors.New("handleNoStreamCache:banned")
+	return record, errors.New("handleNoStreamCache:banned")
 }
 
 func getToken(bouncer *Bouncer) error {
@@ -724,7 +805,8 @@ func handleStreamCache(bouncer *Bouncer) error {
 			default:
 				bouncer.log.Info("handleStreamCache:unknownType " + decision.Type)
 			}
-			bouncer.cacheClient.Set(decision.Value, value, int64(duration.Seconds()))
+			record := cache.DecisionRecord{Verdict: value, Scenario: decision.Scenario, ExpiresAt: time.Now().Add(duration).UTC().Format(time.RFC3339)}
+			_ = bouncer.cacheClient.SetDecision(decision.Value, record, int64(duration.Seconds()))
 		}
 	}
 	for _, decision := range stream.Deleted {

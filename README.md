@@ -1,8 +1,7 @@
-![GitHub](https://img.shields.io/github/license/maxlerebourg/crowdsec-bouncer-traefik-plugin)
-![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/maxlerebourg/crowdsec-bouncer-traefik-plugin)
-![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/maxlerebourg/crowdsec-bouncer-traefik-plugin)
-[![Build Status](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/actions/workflows/go-cross.yml/badge.svg)](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin)](https://goreportcard.com/badge/github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin)
+![GitHub](https://img.shields.io/github/license/eliaswen/crowdsec-bouncer-traefik-plugin)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/eliaswen/crowdsec-bouncer-traefik-plugin)
+![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/eliaswen/crowdsec-bouncer-traefik-plugin)
+[![Go Report Card](https://goreportcard.com/badge/github.com/eliaswen/crowdsec-bouncer-traefik-plugin)](https://goreportcard.com/badge/github.com/eliaswen/crowdsec-bouncer-traefik-plugin)
 
 # Crowdsec Bouncer Traefik plugin
 
@@ -553,7 +552,7 @@ The following declaration (given here in YAML) defines a plugin:
 experimental:
   plugins:
     bouncer:
-      moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      moduleName: github.com/eliaswen/crowdsec-bouncer-traefik-plugin
       version: vX.Y.Z # To update
 ```
 
@@ -750,7 +749,7 @@ Set `crowdsecLapiScheme` to `https`. The plugin then validates Crowdsec's server
 - **Skip verification entirely** (not recommended for production): set `crowdsecLapiTLSInsecureVerify` to `true`.
 
 Crowdsec must be listening in HTTPS for this to work.
-Please see the [tls-auth example](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/tls-auth/README.md) or the official documentation: [docs.crowdsec.net/docs/local_api/tls_auth/](https://docs.crowdsec.net/docs/local_api/tls_auth/)
+Please see the [tls-auth example](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/tls-auth/README.md) or the official documentation: [docs.crowdsec.net/docs/local_api/tls_auth/](https://docs.crowdsec.net/docs/local_api/tls_auth/)
 
 #### Use HTTPS to communicate with the Appsec
 
@@ -779,7 +778,7 @@ CrowdSec documents the same requirement, that the bouncer must forward
 [enabling bot detection](https://docs.crowdsec.net/docs/appsec/bot_detection/enable) and the
 [challenge protocol](https://docs.crowdsec.net/docs/appsec/bot_detection/challenge_protocol).
 
-See [examples/bot-detection/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/bot-detection/README.md).
+See [examples/bot-detection/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/bot-detection/README.md).
 
 #### Manually add an IP to the blocklist (for testing purposes)
 
@@ -793,29 +792,29 @@ docker exec crowdsec cscli decisions remove --ip 10.0.0.10 -t captcha
 
 ### Examples
 
-#### 1. Behind another proxy service (ex: clouflare) [examples/behind-proxy/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/behind-proxy/README.md)
+#### 1. Behind another proxy service (ex: clouflare) [examples/behind-proxy/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/behind-proxy/README.md)
 
-#### 2. With Redis as an external shared cache [examples/redis-cache/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/redis-cache/README.md)
+#### 2. With Redis as an external shared cache [examples/redis-cache/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/redis-cache/README.md)
 
-#### 3. Using Trusted IP (ex: LAN OR VPN) that won't get filtered by crowdsec [examples/trusted-ips/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/trusted-ips/README.md)
+#### 3. Using Trusted IP (ex: LAN OR VPN) that won't get filtered by crowdsec [examples/trusted-ips/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/trusted-ips/README.md)
 
-#### 4. Using Crowdsec and Traefik installed as binary in a single VM [examples/binary-vm/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/binary-vm/README.md)
+#### 4. Using Crowdsec and Traefik installed as binary in a single VM [examples/binary-vm/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/binary-vm/README.md)
 
-#### 5. Using https communication and tls authentication with Crowdsec [examples/tls-auth/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/tls-auth/README.md)
+#### 5. Using https communication and tls authentication with Crowdsec [examples/tls-auth/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/tls-auth/README.md)
 
-#### 6. Using Crowdsec and Traefik in Kubernetes [examples/kubernetes/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/kubernetes/README.md)
+#### 6. Using Crowdsec and Traefik in Kubernetes [examples/kubernetes/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/kubernetes/README.md)
 
-#### 7. Using Traefik in standalone mode without Crowdsec [examples/standalone-mode/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/standalone-mode/README.md)
+#### 7. Using Traefik in standalone mode without Crowdsec [examples/standalone-mode/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/standalone-mode/README.md)
 
-#### 8. Using Traefik with AppSec feature enabled [examples/appsec-enabled/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/appsec-enabled/README.md)
+#### 8. Using Traefik with AppSec feature enabled [examples/appsec-enabled/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/appsec-enabled/README.md)
 
-#### 9. Using Traefik with Captcha remediation feature enabled [examples/captcha/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/captcha/README.md)
+#### 9. Using Traefik with Captcha remediation feature enabled [examples/captcha/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/captcha/README.md)
 
-#### 10. Using Traefik with Custom Ban HTML Page [examples/custom-ban-page/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/custom-ban-page/README.md)
+#### 10. Using Traefik with Custom Ban HTML Page [examples/custom-ban-page/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/custom-ban-page/README.md)
 
-#### 11. Using Traefik with Custom Captcha Whiketkeeper[examples/custom-captcha/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/custom-captcha/README.md)
+#### 11. Using Traefik with Custom Captcha Whiketkeeper[examples/custom-captcha/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/custom-captcha/README.md)
 
-#### 12. Using Traefik with AppSec bot detection enabled [examples/bot-detection/README.md](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/blob/main/examples/bot-detection/README.md)
+#### 12. Using Traefik with AppSec bot detection enabled [examples/bot-detection/README.md](https://github.com/eliaswen/crowdsec-bouncer-traefik-plugin/blob/main/examples/bot-detection/README.md)
 
 ### Local Mode
 
@@ -830,7 +829,7 @@ The source code of the plugin should be organized as follows:
 ./plugins-local/
     └── src
         └── github.com
-            └── maxlerebourg
+            └── eliaswen
                 └── crowdsec-bouncer-traefik-plugin
                     ├── bouncer.go
                     ├── bouncer_test.go
@@ -864,3 +863,40 @@ It was using traefik and forward auth middleware to verify every request.
 They had to go through a webserver which then contacts another webservice (the crowdsec LAPI) to make a decision based on the source IP.  
 We initially proposed some improvements by implementing a streaming mode and a local cache.  
 With the Traefik hackathon we decided to implement our solution directly as a Traefik plugin which could be found by everyone on [plugins.traefik.io](https://plugins.traefik.io) and be more performant.
+
+## Decision details in remediation templates
+
+Set `remediationReasonsFilePath` to an optional UTF-8 file that maps exact CrowdSec scenario names to user-facing descriptions. The file is loaded when the middleware is created; recreate the middleware to reload it. Blank lines and lines beginning with `#` are ignored. Each other line must contain a unique, nonempty scenario and a nonempty double-quoted description:
+
+```text
+# Custom descriptions
+local/http-421-scan = "You are aggressively scanning subdomains that do not resolve. This is suspicious behavior."
+```
+
+Ban and captcha templates retain their existing fields and additionally receive:
+
+| Field | Meaning |
+| --- | --- |
+| `.DecisionScenario` | Raw CrowdSec scenario, or empty when unavailable. |
+| `.DecisionReason` | Custom description, raw scenario, or the existing remediation category. |
+| `.DecisionExpiresAt` | Decision expiry as UTC RFC 3339, or empty when unavailable. |
+| `.DecisionRemainingSeconds` | Remaining whole seconds, rounded up and clamped to zero, or empty. |
+| `.DecisionRemainingTime` | Human-readable remaining duration, or empty. |
+| `.CaptchaGracePeriodSeconds` | Captcha bypass period in seconds (captcha templates only). |
+| `.CaptchaGracePeriod` | Human-readable captcha bypass period (captcha templates only). |
+
+Templates continue to use Go's `text/template` so JSON and other non-HTML output remains unchanged. Custom HTML templates **must escape untrusted fields explicitly**; use the pre-escaped `.DecisionReasonHTML` for the displayed reason, as the bundled pages do. Captcha completion bypasses that captcha challenge for the grace period, but other security checks can still deny access.
+
+## Manual validation and local installation
+
+This repository does not use GitHub Actions. Before publishing changes, run the validation locally with an installed Go toolchain:
+
+```bash
+go build ./...
+go test ./...
+golangci-lint run
+# Run the Yaegi and mock end-to-end targets provided by the Makefile as applicable.
+git diff --check
+```
+
+For local Traefik development, place or link the checkout at `plugins-local/src/github.com/eliaswen/crowdsec-bouncer-traefik-plugin` and configure the module name as `github.com/eliaswen/crowdsec-bouncer-traefik-plugin`. See `docker-compose.local.yml` for a complete mount and static configuration example.

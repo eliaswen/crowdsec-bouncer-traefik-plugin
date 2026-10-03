@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/configuration"
+	"github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/configuration"
 )
 
 // getTestConfig returns a minimal valid configuration for testing.
