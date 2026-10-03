@@ -13,10 +13,10 @@ import (
 	"text/template"
 	"time"
 
-	cache "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/cache"
-	configuration "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/configuration"
-	ip "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/ip"
-	logger "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/logger"
+	cache "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/cache"
+	configuration "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/configuration"
+	ip "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/ip"
+	logger "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/logger"
 )
 
 func TestServeHTTP(t *testing.T) {

@@ -7,11 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 
-	cache "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/cache"
-	configuration "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/configuration"
+	cache "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/cache"
+	configuration "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/configuration"
 )
 
 // Client Captcha client.
@@ -87,6 +88,12 @@ func (c *Client) New(log *slog.Logger, cacheClient *cache.Client, httpClient *ht
 
 // ServeHTTP Handle captcha html page or validation.
 func (c *Client) ServeHTTP(rw http.ResponseWriter, r *http.Request, remoteIP string) {
+	c.ServeHTTPWithData(rw, r, remoteIP, nil)
+}
+
+// ServeHTTPWithData renders the captcha with decision metadata supplied by the
+// middleware while preserving ServeHTTP for existing integrations.
+func (c *Client) ServeHTTPWithData(rw http.ResponseWriter, r *http.Request, remoteIP string, decisionData map[string]string) {
 	valid, err := c.Validate(r)
 	if err != nil {
 		c.log.Info("captcha:ServeHTTP:validate " + err.Error())
@@ -107,14 +114,39 @@ func (c *Client) ServeHTTP(rw http.ResponseWriter, r *http.Request, remoteIP str
 		rw.Header().Set(c.remediationCustomHeader, "captcha")
 	}
 	rw.WriteHeader(http.StatusOK)
-	err = c.template.Execute(rw, map[string]string{
-		"SiteKey":     c.siteKey,
-		"FrontendJS":  c.infoProvider.js,
-		"FrontendKey": c.infoProvider.key,
-	})
+	templateData := map[string]string{
+		"SiteKey":                   c.siteKey,
+		"FrontendJS":                c.infoProvider.js,
+		"FrontendKey":               c.infoProvider.key,
+		"CaptchaGracePeriodSeconds": strconv.FormatInt(c.gracePeriodSeconds, 10),
+		"CaptchaGracePeriod":        readableDuration(c.gracePeriodSeconds),
+	}
+	for key, value := range decisionData {
+		templateData[key] = value
+	}
+	err = c.template.Execute(rw, templateData)
 	if err != nil {
 		c.log.Info("captcha:ServeHTTP captchaTemplateServe " + err.Error())
 	}
+}
+
+func readableDuration(seconds int64) string {
+	parts := make([]string, 0, 3)
+	for _, unit := range []struct {
+		name    string
+		seconds int64
+	}{{"hour", 3600}, {"minute", 60}, {"second", 1}} {
+		value := seconds / unit.seconds
+		seconds %= unit.seconds
+		if value > 0 || (unit.seconds == 1 && len(parts) == 0) {
+			name := unit.name
+			if value != 1 {
+				name += "s"
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", value, name))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // Check Verify if the captcha is already done.

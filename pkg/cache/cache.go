@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,31 @@ import (
 	ttl_map "github.com/leprosus/golang-ttl-map"
 	simpleredis "github.com/maxlerebourg/simpleredis"
 )
+
+// DecisionRecord stores a remediation verdict and the CrowdSec metadata used to
+// explain it. ExpiresAt is an RFC3339 timestamp and is deliberately independent
+// from the cache entry's TTL.
+type DecisionRecord struct {
+	Verdict   string `json:"verdict"`
+	Scenario  string `json:"scenario,omitempty"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
+}
+
+// ParseDecisionRecord accepts both current JSON records and legacy one-byte
+// verdicts written by earlier plugin versions.
+func ParseDecisionRecord(value string) (DecisionRecord, error) {
+	if value == BannedValue || value == NoBannedValue || value == CaptchaValue {
+		return DecisionRecord{Verdict: value}, nil
+	}
+	var record DecisionRecord
+	if err := json.Unmarshal([]byte(value), &record); err != nil {
+		return record, fmt.Errorf("decode decision record: %w", err)
+	}
+	if record.Verdict == "" {
+		return record, errors.New("decode decision record: empty verdict")
+	}
+	return record, nil
+}
 
 const (
 	// BannedValue Banned string.
@@ -143,4 +169,24 @@ func (c *Client) Get(key string) (string, error) {
 func (c *Client) Set(key string, value string, duration int64) {
 	c.log.Debug(fmt.Sprintf("cache:Set key:%v value:%v duration:%vs", key, value, duration))
 	c.cache.set(key, value, duration)
+}
+
+// GetDecision returns a decision record, transparently upgrading legacy values
+// in memory for the caller.
+func (c *Client) GetDecision(key string) (DecisionRecord, error) {
+	value, err := c.Get(key)
+	if err != nil {
+		return DecisionRecord{}, err
+	}
+	return ParseDecisionRecord(value)
+}
+
+// SetDecision serializes a decision record for either local or Redis storage.
+func (c *Client) SetDecision(key string, record DecisionRecord, duration int64) error {
+	value, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("encode decision record: %w", err)
+	}
+	c.Set(key, string(value), duration)
+	return nil
 }

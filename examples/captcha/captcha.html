@@ -292,6 +292,9 @@
           </path>
         </svg>
         <h1 class="text-2xl lg:text-3xl xl:text-4xl">CrowdSec Captcha</h1>
+        <p class="my-3"><strong>Reason:</strong> {{ .DecisionReasonHTML }}</p>
+        {{ if .DecisionRemainingSeconds }}<p class="my-3" data-decision-countdown="{{ .DecisionRemainingSeconds }}">Decision remaining: <span>{{ .DecisionRemainingTime }}</span></p>{{ end }}
+        <p class="my-3">Solving this captcha bypasses this challenge for {{ .CaptchaGracePeriod }}. Other security checks can still block access.</p>
       </div>
       <form action="" method="POST" class="flex flex-col items-center space-y-1" id="captcha-form">
         <div id="captcha" class="{{ .FrontendKey }}" data-sitekey="{{ .SiteKey }}" data-callback="captchaCallback">
@@ -333,6 +336,23 @@
     function captchaCallback() {
       setTimeout(() => document.querySelector('#captcha-form').submit(), 500);
     }
+  </script>
+  <script>
+    (() => {
+      const container = document.querySelector('[data-decision-countdown]');
+      if (!container) return;
+      let seconds = Number(container.dataset.decisionCountdown);
+      const output = container.querySelector('span');
+      const render = () => {
+        if (seconds <= 0) { container.textContent = 'Decision time elapsed; refresh to check access'; return; }
+        const units = [['hour', 3600], ['minute', 60], ['second', 1]];
+        let left = seconds;
+        output.textContent = units.map(([name, size]) => { const value = Math.floor(left / size); left %= size; return value ? `${value} ${name}${value === 1 ? '' : 's'}` : ''; }).filter(Boolean).join(' ');
+        seconds -= 1;
+        setTimeout(render, 1000);
+      };
+      setTimeout(render, 1000);
+    })();
   </script>
 </body>
 </html>

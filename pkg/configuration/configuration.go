@@ -13,10 +13,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 
-	ip "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin/pkg/ip"
+	ip "github.com/eliaswen/crowdsec-bouncer-traefik-plugin/pkg/ip"
 )
 
 // Enums for crowdsec mode.
@@ -115,6 +116,7 @@ type Config struct {
 	CaptchaSecretKey                           string   `json:"captchaSecretKey,omitempty"`
 	CaptchaSecretKeyFile                       string   `json:"captchaSecretKeyFile,omitempty"`
 	CaptchaGracePeriodSeconds                  int64    `json:"captchaGracePeriodSeconds,omitempty"`
+	RemediationReasonsFilePath                 string   `json:"remediationReasonsFilePath,omitempty"`
 }
 
 func contains(source []string, target string) bool {
@@ -177,7 +179,41 @@ func New() *Config {
 		RedisCachePassword:                "",
 		RedisCacheDatabase:                "",
 		RedisCacheUnreachableBlock:        true,
+		RemediationReasonsFilePath:        "",
 	}
+}
+
+// GetRemediationReasons parses exact scenario-to-description mappings.
+func GetRemediationReasons(path string) (map[string]string, error) {
+	reasons := make(map[string]string)
+	if path == "" {
+		return reasons, nil
+	}
+	b, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return nil, fmt.Errorf("remediation reasons file %s: %w", path, err)
+	}
+	for lineNumber, raw := range strings.Split(string(b), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+			return nil, fmt.Errorf("remediation reasons file %s line %d: malformed entry", path, lineNumber+1)
+		}
+		scenario := strings.TrimSpace(parts[0])
+		quoted := strings.TrimSpace(parts[1])
+		description, unquoteErr := strconv.Unquote(quoted)
+		if unquoteErr != nil || len(quoted) < 2 || quoted[0] != '"' || quoted[len(quoted)-1] != '"' || description == "" {
+			return nil, fmt.Errorf("remediation reasons file %s line %d: description must be a nonempty double-quoted string", path, lineNumber+1)
+		}
+		if _, exists := reasons[scenario]; exists {
+			return nil, fmt.Errorf("remediation reasons file %s line %d: duplicate scenario %q", path, lineNumber+1, scenario)
+		}
+		reasons[scenario] = description
+	}
+	return reasons, nil
 }
 
 // GetVariable get variable from file and after in the variables gave by user.
